@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Neon Horizon: Instant Boot Edition</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;700;900&family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --primary: #00f0ff;
+    --secondary: #ff0055;
+    --accent: #ffea00;
+    --bg-dark: #020005;
+    --hud-bg: rgba(5, 10, 20, 0.85);
+    --font-main: 'Chakra Petch', sans-serif;
+    --font-mono: 'Share Tech Mono', monospace;
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box; touch-action: none; user-select: none;
+    -webkit-tap-highlight-color: transparent; margin: 0; padding: 0;
+  }
+  
+  body, html {
+    width: 100%; height: 100%; background-color: var(--bg-dark);
+    font-family: var(--font-main); overflow: hidden; position: relative;
+  }
+
+  canvas {
+    display: block; width: 100%; height: 100%;
+    object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1;
+  }
+
+  #fx-layer {
+    position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    background: radial-gradient(circle at center, rgba(0,0,0,0) 40%, rgba(0,0,0,0.85) 100%);
+  }
+
+  .scanlines {
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    background-size: 100% 4px, 6px 100%; opacity: 0.4; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+  }
+
+  #nitro-warp {
+    position: absolute; inset: 0; z-index: 3; pointer-events: none; opacity: 0;
+    box-shadow: inset 0 0 100px 50px rgba(0,240,255,0.3); transition: opacity 0.3s;
+  }
+
+  /* HUD */
+  #hud {
+    position: absolute; top: 15px; left: 15px; right: 15px;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    pointer-events: none; z-index: 10; opacity: 0; transition: opacity 0.5s;
+  }
+  
+  .hud-left { display: flex; flex-direction: column; gap: 12px; }
+  
+  .hud-box {
+    background: var(--hud-bg); border: 1px solid rgba(0,240,255,0.3); border-left: 4px solid var(--primary);
+    padding: 10px 18px; border-radius: 4px 12px 12px 4px; color: #fff;
+    backdrop-filter: blur(10px); transform: skewX(-5deg); box-shadow: 0 4px 20px rgba(0,240,255,0.15);
+  }
+
+  .hud-val {
+    font-size: clamp(24px, 4vw, 36px); font-weight: 900; color: #fff; text-shadow: 0 0 10px var(--primary);
+    font-style: italic; display: flex; align-items: baseline; gap: 6px; line-height: 1; font-family: var(--font-mono);
+  }
+  
+  .hud-label { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: var(--primary); font-weight: 700; margin-bottom: 4px; }
+
+  .nitro-container { 
+    width: clamp(140px, 20vw, 220px); height: 12px; background: rgba(0,0,0,0.8); border: 2px solid #444; 
+    border-radius: 8px; margin-top: 5px; overflow: hidden; transform: skewX(-10deg); position: relative;
+  }
+  #nitro-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #00f0ff, #0055ff); box-shadow: 0 0 10px var(--primary); transition: width 0.1s linear; }
+  #nitro-fill.ready { background: linear-gradient(90deg, #ff0055, #ffaa00); box-shadow: 0 0 15px var(--secondary); animation: pulse-nitro 0.5s infinite alternate; }
+  @keyframes pulse-nitro { 0% { opacity: 0.7; } 100% { opacity: 1; } }
+  .nitro-label { font-size: 10px; font-weight: 900; color: #fff; letter-spacing: 2px; text-shadow: 0 0 5px var(--primary); margin-top: 4px; font-style: italic;}
+
+  #gauge-container {
+    background: rgba(5, 10, 15, 0.9); border: 2px solid var(--secondary); border-radius: 50%;
+    width: clamp(90px, 15vw, 130px); height: clamp(90px, 15vw, 130px); 
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    box-shadow: 0 0 20px rgba(255, 0, 85, 0.2), inset 0 0 15px rgba(255, 0, 85, 0.2); 
+    position: relative; overflow: hidden;
+  }
+  #gauge-fill { position: absolute; bottom: 0; left: 0; width: 100%; height: 0%; background: linear-gradient(to top, rgba(255,0,85,0.2), rgba(255,0,85,0.9)); z-index: 0; transition: height 0.1s linear; }
+  .speed-num { font-size: clamp(28px, 5vw, 42px); font-weight: 900; color: #fff; text-shadow: 0 0 15px var(--secondary); font-style: italic; line-height: 1; z-index: 1; position: relative; font-family: var(--font-mono); }
+  .speed-unit { font-size: 10px; color: #ff88aa; letter-spacing: 2px; font-weight: 700; z-index: 1; position: relative; }
+  #gear-indicator { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 2; font-size: clamp(12px, 2vw, 16px); font-weight: 900; color: var(--primary); }
+
+  .hud-right { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
+  #minimap { width: clamp(100px, 18vw, 160px); height: clamp(100px, 18vw, 160px); background: rgba(0, 5, 10, 0.85); border: 2px solid var(--primary); border-radius: 50%; box-shadow: 0 0 20px rgba(0, 240, 255, 0.2); }
+  .info-tag { background: rgba(0,240,255,0.1); border: 1px solid var(--primary); padding: 4px 12px; border-radius: 20px; color: var(--primary); font-weight: 700; font-size: 10px; letter-spacing: 1px; backdrop-filter: blur(5px); }
+
+  /* Controls */
+  #controls {
+    position: absolute; bottom: 20px; left: 15px; right: 15px; 
+    display: flex; justify-content: space-between; align-items: flex-end; 
+    pointer-events: none; z-index: 10; opacity: 0; transition: opacity 0.5s;
+  }
+  .btn-group { display: flex; gap: 8px; pointer-events: auto; align-items: flex-end; }
+  
+  .ctrl-dir { 
+    width: clamp(60px, 10vw, 80px); height: clamp(60px, 10vw, 80px); background: rgba(255, 255, 255, 0.05); border: 2px solid rgba(255, 255, 255, 0.3); 
+    border-radius: 50%; color: rgba(255,255,255,0.8); font-size: clamp(24px, 4vw, 32px); display: flex; justify-content: center; align-items: center; cursor: pointer; backdrop-filter: blur(5px); transition: 0.1s; 
+  }
+  .ctrl-dir:active { background: rgba(255,255,255,0.3); transform: scale(0.9); box-shadow: 0 0 20px rgba(255,255,255,0.5); color: #fff;}
+
+  .pedal { border-radius: 12px; display: flex; flex-direction: column; justify-content: center; align-items: center; font-size: clamp(16px, 3vw, 22px); font-weight: 900; cursor: pointer; transition: 0.1s; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+  .pedal span { font-size: 9px; opacity: 0.8; font-weight: 700; letter-spacing: 1px; margin-top: 2px;}
+  
+  .brake { width: clamp(65px, 11vw, 85px); height: clamp(60px, 10vw, 75px); background: rgba(255, 0, 85, 0.15); border: 2px solid var(--secondary); color: var(--secondary); backdrop-filter: blur(5px); box-shadow: 0 4px 15px rgba(255, 0, 85, 0.2); }
+  .brake:active { background: rgba(255, 0, 85, 0.8); color: #fff; transform: scale(0.92) translateY(2px); box-shadow: 0 0 25px var(--secondary); }
+
+  .nitro-btn { width: clamp(65px, 11vw, 85px); height: clamp(60px, 10vw, 75px); background: rgba(170, 0, 255, 0.2); border: 2px solid #aa00ff; color: #aa00ff; backdrop-filter: blur(5px); font-style: italic; }
+  .nitro-btn.ready { background: rgba(255, 0, 85, 0.4); border-color: var(--secondary); color: var(--secondary); animation: pulse-nitro 0.5s infinite alternate; }
+  .nitro-btn:active { transform: scale(0.92) translateY(2px); background: #aa00ff; color: #fff; }
+  .nitro-btn.ready:active { background: var(--secondary); color: #fff; box-shadow: 0 0 30px var(--secondary); }
+
+  .accel { width: clamp(75px, 13vw, 100px); height: clamp(75px, 13vw, 100px); background: linear-gradient(135deg, var(--primary), #0088ff); border: none; color: #001020; box-shadow: 0 8px 30px rgba(0, 240, 255, 0.4); font-size: clamp(24px, 4vw, 32px); }
+  .accel:active { background: #50ffff; transform: scale(0.92) translateY(4px); box-shadow: 0 4px 15px rgba(0, 240, 255, 0.8); }
+
+  /* Menus */
+  .overlay { 
+    position: absolute; inset: 0; background: radial-gradient(circle, rgba(5,10,25,0.95) 0%, rgba(0,0,5,1) 100%); 
+    backdrop-filter: blur(20px); display: flex; flex-direction: column; justify-content: center; align-items: center; 
+    z-index: 30; color: white; transition: opacity 0.5s ease; padding: 20px;
+  }
+  .glitch-title { font-size: clamp(36px, 8vw, 80px); color: #fff; font-style: italic; font-weight: 900; text-shadow: 0 0 10px var(--primary), 0 0 30px #0088ff, -3px -3px 0 var(--secondary), 3px 3px 0 var(--primary); text-align: center; margin-bottom: 5px; }
+  .subtitle { color: #8cf; letter-spacing: 6px; font-size: clamp(10px, 2vw, 16px); margin-bottom: 30px; text-transform: uppercase; font-weight: 700; text-align: center; }
+
+  .garage-container { display: flex; gap: 15px; margin-bottom: 30px; width: 100%; max-width: 750px; justify-content: center; flex-wrap: wrap; }
+  .car-card { background: rgba(0,240,255,0.05); border: 1px solid rgba(0,240,255,0.3); border-radius: 12px; padding: 12px; width: 200px; text-align: center; cursor: pointer; transition: 0.2s; }
+  .car-card.selected { border: 2px solid var(--primary); background: rgba(0,240,255,0.2); box-shadow: 0 0 30px rgba(0,240,255,0.4); transform: scale(1.05); }
+  .car-name { font-size: 18px; font-weight: 900; color: var(--primary); margin-bottom: 8px; font-style: italic; }
+  .stat-row { display: flex; justify-content: space-between; font-size: 10px; color: #aaa; margin-bottom: 3px; }
+  .stat-bar { width: 100%; height: 5px; background: #222; border-radius: 3px; overflow: hidden; margin-bottom: 8px; }
+  .stat-fill { height: 100%; background: var(--primary); }
+
+  .btn-primary { 
+    background: rgba(0,240,255,0.1); color: var(--primary); border: 2px solid var(--primary); 
+    padding: 15px 40px; border-radius: 50px; font-size: clamp(16px, 3vw, 22px); font-weight: 900; 
+    cursor: pointer; box-shadow: 0 0 20px rgba(0,240,255,0.4); text-transform: uppercase; letter-spacing: 4px; transition: 0.2s; 
+  }
+  .btn-primary:hover { background: var(--primary); color: #000; box-shadow: 0 0 40px rgba(0,240,255,0.8); transform: scale(1.05); }
+
+  .controls-hint { margin-top: 15px; text-align: center; color: #668; font-size: 11px; letter-spacing: 1px; line-height: 1.5; }
+  .controls-hint span { color: var(--primary); font-weight: bold; }
+
+  #game-over { display: none; background: radial-gradient(circle, rgba(50,0,15,0.95) 0%, rgba(5,0,0,1) 100%); }
+  #game-over h1 { font-size: clamp(50px, 12vw, 100px); color: var(--secondary); margin-bottom: 10px; font-style: italic; font-weight: 900; text-shadow: 0 0 30px var(--secondary); text-align: center; }
+
+  #loading {
+    position: absolute; inset: 0; background: #000; z-index: 100;
+    display: flex; justify-content: center; align-items: center; color: var(--primary);
+    font-size: 24px; font-weight: 900; letter-spacing: 5px; font-style: italic; transition: opacity 0.5s;
+  }
+
+  @media (max-width: 768px) {
+    #minimap { display: none; } 
+    .info-tag { display: none; } 
+    .garage-container { gap: 8px; }
+    .car-card { width: 130px; padding: 8px; }
+    .car-name { font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="loading">BOOTING ENGINE...</div>
+
+<canvas id="gameCanvas"></canvas>
+<div class="scanlines"></div>
+<div id="nitro-warp"></div>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="hud-left">
+    <div class="hud-box">
+      <div class="hud-label">Score / Lvl</div>
+      <div class="hud-val"><span id="ui-score">000000</span> <span style="font-size:16px; color:var(--primary);">L<span id="ui-lvl">1</span></span></div>
+      <div class="nitro-label">N2O SYSTEM</div>
+      <div class="nitro-container"><div id="nitro-fill"></div></div>
+    </div>
+    <div id="gauge-container">
+      <div id="gauge-fill"></div>
+      <div class="speed-num" id="ui-speed">0</div>
+      <div class="speed-unit">KM/H</div>
+      <div id="gear-indicator">G1</div>
+    </div>
+  </div>
+  
+  <div class="hud-right">
+    <div class="info-tag" id="ui-time">TIME: DAY</div>
+    <div class="info-tag" id="ui-weather">WX: CLEAR</div>
+    <canvas id="minimap"></canvas>
+  </div>
+</div>
+
+<!-- CONTROLS -->
+<div id="controls">
+  <div class="btn-group">
+    <div class="ctrl-dir" id="btn-left">◁</div>
+    <div class="ctrl-dir" id="btn-right">▷</div>
+  </div>
+  <div class="btn-group">
+    <div class="pedal brake" id="btn-brake">B<span>BRK</span></div>
+    <div class="pedal nitro-btn" id="btn-nitro">N2O<span>BOOST</span></div>
+    <div class="pedal accel" id="btn-accel">A<span>GAS</span></div>
+  </div>
+</div>
+
+<!-- MENU -->
+<div id="menu" class="overlay">
+  <h1 class="glitch-title">NEON HORIZON</h1>
+  <p class="subtitle">Titan Engine v5.0</p>
+  
+  <div class="garage-container">
+    <div class="car-card selected" data-car="0">
+      <div class="car-name">INTERCEPTOR</div>
+      <div class="stat-row"><span>SPEED</span><span>BALANCED</span></div>
+      <div class="stat-bar"><div class="stat-fill" style="width: 70%;"></div></div>
+    </div>
+    <div class="car-card" data-car="1">
+      <div class="car-name">APEX V12</div>
+      <div class="stat-row"><span>SPEED</span><span>EXTREME</span></div>
+      <div class="stat-bar"><div class="stat-fill" style="width: 95%; background: var(--secondary);"></div></div>
+    </div>
+    <div class="car-card" data-car="2">
+      <div class="car-name">BEHEMOTH</div>
+      <div class="stat-row"><span>HANDLING</span><span>EXTREME</span></div>
+      <div class="stat-bar"><div class="stat-fill" style="width: 95%; background: var(--accent);"></div></div>
+    </div>
+  </div>
+
+  <button class="btn-primary" id="btn-start">DEPLOY VEHICLE</button>
+  <div class="controls-hint">
+    Use <span>[W,A,S,D]</span> or <span>[TOUCH]</span> to Drive.<br>
+    <span>LANDSCAPE MODE RECOMMENDED</span>
+  </div>
+</div>
+
+<!-- GAME OVER -->
+<div id="game-over" class="overlay">
+  <h1>WRECKED</h1>
+  <h2 style="font-size: 24px; color:#fff; margin-bottom:30px; text-align:center;">FINAL SCORE: <br><span id="final-score" style="color:var(--primary); font-family:var(--font-mono);">000000</span></h2>
+  <button class="btn-primary" id="btn-replay">GARAGE</button>
+</div>
+
+<script>
+/**
+ * ============================================================================
+ * TITAN ENGINE - INSTANT BOOT & BULLETPROOF ARCHITECTURE
+ * ============================================================================
+ */
+const CONFIG = {
+  SEG_LENGTH: 200, RUMBLE_LENGTH: 3, DRAW_DIST: 250, LANES: 4, ROAD_W: 4000, TRACK_LEN: 3000, CAM_H: 1000, CAM_DEPTH: 0.84
+};
+
+const CAR_STATS = [
+  { name: 'INTERCEPTOR', color: '#00f0ff', topSpeed: 130, accel: 4.5, handling: 0.15, drag: 6 },
+  { name: 'APEX V12', color: '#ff0055', topSpeed: 160, accel: 3.5, handling: 0.08, drag: 5 },
+  { name: 'BEHEMOTH', color: '#ffea00', topSpeed: 100, accel: 6.0, handling: 0.25, drag: 8 }
+];
+
+const PALETTES = {
+  day: { skyTop: '#42a5f5', skyBot: '#81d4fa', sun: '#ffea00', road: '#445', roadEdge: '#334', grass: '#2ecc71', rumble1: '#fff', rumble2: '#e74c3c' },
+  sunset: { skyTop: '#2b0055', skyBot: '#ff3366', sun: '#ff9900', road: '#332', roadEdge: '#221', grass: '#802b44', rumble1: '#ffcc00', rumble2: '#990033' },
+  night: { skyTop: '#02000a', skyBot: '#1b0033', sun: '#ff0055', road: '#111', roadEdge: '#0a0a0a', grass: '#05070a', rumble1: '#00f0ff', rumble2: '#ff0055' }
+};
+
+class GameEngine {
+  constructor() {
+    this.canvas = document.getElementById('gameCanvas');
+    this.ctx = this.canvas.getContext('2d', { alpha: false });
+    this.miniCanvas = document.getElementById('minimap');
+    if(this.miniCanvas) { this.miniCanvas.width = 140; this.miniCanvas.height = 140; this.miniCtx = this.miniCanvas.getContext('2d'); }
+    
+    this.w = 800; this.h = 600;
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+
+    this.keys = { left: false, right: false, up: false, down: false, nitro: false };
+    this.bindInputs();
+
+    this.segments = [];
+    this.cars = [];
+    this.cityscape = [];
+    this.particles = [];
+    this.stars = Array.from({length: 150}, () => ({x: Math.random()*100, y: Math.random()*100, s: Math.random()*2+0.5}));
+
+    this.player = { x: 0, z: 0, speed: 0, nitroAmt: 100, nitroActive: false, carType: 0 };
+    this.score = 0;
+    this.state = 'MENU';
+    this.timeOfDay = 2;
+    this.weather = 0;
+    this.lastTime = performance.now();
+
+    this.buildStaticMap();
+
+    // REMOVE LOADING SCREEN INSTANTLY
+    setTimeout(() => {
+      let l = document.getElementById('loading');
+      if(l) { l.style.opacity = '0'; setTimeout(() => l.style.display = 'none', 400); }
+    }, 200);
+
+    document.getElementById('btn-start').addEventListener('click', () => this.start());
+    document.getElementById('btn-replay').addEventListener('click', () => {
+      document.getElementById('game-over').style.display = 'none';
+      let m = document.getElementById('menu'); m.style.display = 'flex'; m.style.opacity = '1';
+      document.getElementById('hud').style.opacity = '0'; document.getElementById('controls').style.opacity = '0';
+      this.state = 'MENU';
+    });
+
+    document.querySelectorAll('.car-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.car-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        this.player.carType = parseInt(card.getAttribute('data-car'));
+      });
+    });
+
+    requestAnimationFrame((t) => this.loop(t));
+  }
+
+  resize() {
+    this.w = this.canvas.width = window.innerWidth || 800;
+    this.h = this.canvas.height = window.innerHeight || 600;
+  }
+
+  bindInputs() {
+    window.addEventListener('keydown', (e) => this.setKey(e.code, true));
+    window.addEventListener('keyup', (e) => this.setKey(e.code, false));
+    this.touch('btn-left', 'left'); this.touch('btn-right', 'right');
+    this.touch('btn-accel', 'up'); this.touch('btn-brake', 'down'); this.touch('btn-nitro', 'nitro');
+  }
+
+  setKey(code, isDown) {
+    if(code==='ArrowLeft'||code==='KeyA') this.keys.left = isDown;
+    if(code==='ArrowRight'||code==='KeyD') this.keys.right = isDown;
+    if(code==='ArrowUp'||code==='KeyW') this.keys.up = isDown;
+    if(code==='ArrowDown'||code==='KeyS') this.keys.down = isDown;
+    if(code==='ShiftLeft'||code==='ShiftRight') this.keys.nitro = isDown;
+  }
+
+  touch(id, key) {
+    let el = document.getElementById(id);
+    if(!el) return;
+    let d = (e) => { e.preventDefault(); this.keys[key] = true; };
+    let u = (e) => { e.preventDefault(); this.keys[key] = false; };
+    el.addEventListener('mousedown', d); el.addEventListener('touchstart', d, {passive:false});
+    window.addEventListener('mouseup', u); el.addEventListener('touchend', u);
+  }
+
+  buildStaticMap() {
+    this.segments = []; this.cars = []; this.cityscape = [];
+    for(let i=0; i<50; i++) this.cityscape.push({ x: Math.random() * 10000, w: Math.random()*200+100, h: Math.random()*300+100, z: Math.random() });
+
+    for(let i=0; i<CONFIG.TRACK_LEN; i++) {
+      let curve = (i > 50 && i < 200) ? Math.sin(i*0.05) * 6 : 0;
+      this.segments.push({
+        index: i,
+        p1: { x:0, y:0, z: i * CONFIG.SEG_LENGTH },
+        p2: { x:0, y:0, z: (i+1) * CONFIG.SEG_LENGTH },
+        curve: curve, cars: [], sprites: [], color: { road: (i%2 ? '#445' : '#334') },
+        isDark: (Math.floor(i / CONFIG.RUMBLE_LENGTH) % 2) === 1
+      });
+      if(i > 100 && i % 100 === 0) {
+        this.segments[i].sprites.push({ type: 'tree', offset: (Math.random()>0.5?1:-1)*2 });
+      }
+    }
+    this.trackMaxZ = this.segments.length * CONFIG.SEG_LENGTH;
+  }
+
+  start() {
+    let doc = window.document.documentElement;
+    if(doc.requestFullscreen) doc.requestFullscreen().catch(e=>{});
+    
+    let m = document.getElementById('menu');
+    m.style.opacity = '0'; setTimeout(() => m.style.display = 'none', 400);
+    
+    this.timeOfDay = Math.floor(Math.random() * 3);
+    this.weather = Math.random() > 0.7 ? 1 : 0;
+    
+    document.getElementById('ui-time').innerText = `TIME: ${['DAY','SUNSET','NIGHT'][this.timeOfDay]}`;
+    document.getElementById('ui-weather').innerText = `WX: ${this.weather === 1 ? 'RAIN' : 'CLEAR'}`;
+
+    this.player.x = 0; this.player.z = 0; this.player.speed = 0; this.player.nitroAmt = 100;
+    this.score = 0; 
+    
+    document.getElementById('hud').style.opacity = '1';
+    document.getElementById('controls').style.opacity = '1';
+    
+    this.state = 'PLAYING';
+    this.lastTime = performance.now();
+  }
+
+  crash() {
+    if(this.state !== 'PLAYING') return;
+    this.state = 'GAMEOVER';
+    
+    document.getElementById('final-score').innerText = String(Math.floor(this.score / 1000)).padStart(6, '0');
+    setTimeout(() => {
+      document.getElementById('hud').style.opacity = '0';
+      document.getElementById('controls').style.opacity = '0';
+      document.getElementById('game-over').style.display = 'flex';
+    }, 1000);
+  }
+
+  update(dt) {
+    if (this.state === 'MENU') {
+      this.player.z += 1000 * dt; // Auto scroll in garage
+      return;
+    }
+    if (this.state === 'GAMEOVER') return;
+
+    let stats = CAR_STATS[this.player.carType];
+    let maxS = CONFIG.SEG_LENGTH * stats.topSpeed * (this.keys.nitro && this.player.nitroAmt > 0 ? 1.5 : 1);
+    let acc = CONFIG.SEG_LENGTH * stats.accel;
+
+    if (this.keys.up) this.player.speed += acc * dt;
+    else if (this.keys.down) this.player.speed -= acc * 1.5 * dt;
+    else this.player.speed -= acc * 0.4 * dt;
+
+    this.player.speed = Math.max(0, Math.min(this.player.speed, maxS));
+
+    let dx = dt * 2.5 * stats.handling * (this.player.speed / maxS);
+    if (this.keys.left) this.player.x -= dx;
+    if (this.keys.right) this.player.x += dx;
+    this.player.x = Math.max(-2.5, Math.min(2.5, this.player.x));
+
+    this.player.z = (this.player.z + (this.player.speed * dt)) % this.trackMaxZ;
+    this.score += this.player.speed * dt;
+
+    let speedPct = this.player.speed / (CONFIG.SEG_LENGTH * 160);
+    document.getElementById('ui-speed').innerText = Math.floor(speedPct * 300);
+    document.getElementById('gauge-fill').style.height = `${Math.min(1, speedPct)*100}%`;
+  }
+
+  render() {
+    if(this.w <= 0 || this.h <= 0) return;
+    let P = PALETTES[this.timeOfDay === 0 ? 'day' : (this.timeOfDay === 1 ? 'sunset' : 'night')];
+
+    // Sky
+    let sky = this.ctx.createLinearGradient(0, 0, 0, this.h/2);
+    sky.addColorStop(0, P.skyTop); sky.addColorStop(1, P.skyBot);
+    this.ctx.fillStyle = sky; this.ctx.fillRect(0, 0, this.w, this.h);
+
+    // Road Rasterization Loop
+    let baseIdx = Math.floor(this.player.z / CONFIG.SEG_LENGTH) % this.segments.length;
+    let baseSeg = this.segments[baseIdx];
+    let maxy = this.h;
+    
+    let x = 0, dx = -baseSeg.curve * ((this.player.z % CONFIG.SEG_LENGTH) / CONFIG.SEG_LENGTH);
+
+    for (let n = 0; n < CONFIG.DRAW_DIST; n++) {
+      let seg = this.segments[(baseIdx + n) % this.segments.length];
+      
+      // 3D Projection Math
+      let p1z = seg.p1.z - this.player.z; if(p1z <= 0) p1z += this.trackMaxZ;
+      let p2z = seg.p2.z - this.player.z; if(p2z <= 0) p2z += this.trackMaxZ;
+
+      let scale1 = CONFIG.CAM_DEPTH / p1z;
+      let scale2 = CONFIG.CAM_DEPTH / p2z;
+
+      let x1 = Math.round((this.w / 2) + (scale1 * (0 - (this.player.x * CONFIG.ROAD_W) + x) * this.w / 2));
+      let y1 = Math.round((this.h / 2) - (scale1 * CONFIG.CAM_H * this.h / 2));
+      let w1 = Math.round(scale1 * CONFIG.ROAD_W * this.w / 2);
+
+      x += dx; dx += seg.curve;
+
+      let x2 = Math.round((this.w / 2) + (scale2 * (0 - (this.player.x * CONFIG.ROAD_W) + x) * this.w / 2));
+      let y2 = Math.round((this.h / 2) - (scale2 * CONFIG.CAM_H * this.h / 2));
+      let w2 = Math.round(scale2 * CONFIG.ROAD_W * this.w / 2);
+
+      if (y2 >= maxy || scale1 < 0) continue;
+
+      // Draw Grass
+      this.ctx.fillStyle = seg.isDark ? '#050a10' : P.grass;
+      this.ctx.fillRect(0, y2, this.w, y1 - y2);
+
+      // Draw Road
+      this.ctx.fillStyle = seg.color.road || P.road;
+      this.ctx.beginPath();
+      this.ctx.moveTo(x1 - w1, y1); this.ctx.lineTo(x1 + w1, y1);
+      this.ctx.lineTo(x2 + w2, y2); this.ctx.lineTo(x2 - w2, y2);
+      this.ctx.fill();
+
+      // Draw Rumble Strips
+      let r1 = w1 / 10, r2 = w2 / 10;
+      this.ctx.fillStyle = seg.isDark ? P.rumble2 : P.rumble1;
+      this.ctx.beginPath();
+      this.ctx.moveTo(x1 - w1 - r1, y1); this.ctx.lineTo(x1 - w1, y1);
+      this.ctx.lineTo(x2 - w2, y2); this.ctx.lineTo(x2 - w2 - r2, y2);
+      this.ctx.fill();
+      this.ctx.beginPath();
+      this.ctx.moveTo(x1 + w1, y1); this.ctx.lineTo(x1 + w1 + r1, y1);
+      this.ctx.lineTo(x2 + w2 + r2, y2); this.ctx.lineTo(x2 + w2, y2);
+      this.ctx.fill();
+
+      maxy = y1;
+    }
+
+    // Draw Player Sprite (Center)
+    let pW = 300, pH = 150;
+    this.ctx.fillStyle = CAR_STATS[this.player.carType].color;
+    this.ctx.fillRect(this.w/2 - pW/2, this.h * 0.85 - pH, pW, pH);
+  }
+
+  loop(t) {
+    let dt = (t - this.lastTime) / 1000;
+    if (isNaN(dt) || dt > 0.1 || dt <= 0) dt = 1/60;
+    this.lastTime = t;
+
+    this.update(dt);
+    this.render();
+
+    let s = isNaN(this.score) ? 0 : this.score;
+    document.getElementById('ui-score').innerText = String(Math.floor(s / 1000)).padStart(6, '0');
+    document.getElementById('ui-lvl').innerText = Math.floor(s / 50000) + 1;
+
+    requestAnimationFrame((time) => this.loop(time));
+  }
+}
+
+window.onload = () => { window.GAME = new GameEngine(); };
+</script>
+</body>
+</html>
